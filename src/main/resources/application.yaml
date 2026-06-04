@@ -1,3 +1,21 @@
 spring:
   application:
     name: tg
+
+telegram:
+  bot:
+    enabled: ${TELEGRAM_BOT_ENABLED:true}
+    token: ${TELEGRAM_BOT_TOKEN}
+    username: ${TELEGRAM_BOT_USERNAME:reu_smart_bit_bot}
+  target-chat-id: ${TELEGRAM_TARGET_CHAT_ID:-1003999451875}
+
+backend:
+  url: ${BACKEND_URL:http://localhost:8080}
+
+server:
+  port: ${SERVER_PORT:8000}
+
+logging:
+  level:
+    org.telegram: WARN
+    smartbid.tg: INFO
