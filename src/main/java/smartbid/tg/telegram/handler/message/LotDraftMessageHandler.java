@@ -1,0 +1,93 @@
+package smartbid.tg.telegram.handler.message;
+
+import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.api.objects.PhotoSize;
+import smartbid.tg.conversation.ConversationState;
+import smartbid.tg.conversation.ConversationStep;
+import smartbid.tg.conversation.ConversationStorage;
+import smartbid.tg.lot.LotDraft;
+
+import java.util.Comparator;
+
+@Component
+public class LotDraftMessageHandler implements MessageHandler {
+
+    private final ConversationStorage conversationStorage;
+
+    public LotDraftMessageHandler(ConversationStorage conversationStorage) {
+        this.conversationStorage = conversationStorage;
+    }
+
+    @Override
+    public boolean supports(Message message) {
+        return conversationStorage.findByUserId(message.getFrom().getId()).isPresent();
+    }
+
+    @Override
+    public BotApiMethod<?> handle(Message message) {
+        ConversationState state = conversationStorage.findByUserId(message.getFrom().getId())
+                .orElseThrow(() -> new IllegalStateException("Conversation state is required"));
+
+        return switch (state.step()) {
+            case WAITING_TITLE -> handleTitle(message, state);
+            case WAITING_DESCRIPTION -> handleDescription(message, state);
+            case WAITING_PHOTO -> handlePhoto(message, state);
+        };
+    }
+
+    private SendMessage handleTitle(Message message, ConversationState state) {
+        if (!message.hasText() || message.getText().isBlank()) {
+            return send(message, "Пожалуйста, напиши название лота текстом.");
+        }
+
+        LotDraft updatedDraft = state.draft().withTitle(message.getText().trim());
+        conversationStorage.save(new ConversationState(ConversationStep.WAITING_DESCRIPTION, updatedDraft));
+        return send(message, "Отлично. Теперь напиши описание лота.");
+    }
+
+    private SendMessage handleDescription(Message message, ConversationState state) {
+        if (!message.hasText() || message.getText().isBlank()) {
+            return send(message, "Пожалуйста, напиши описание лота текстом.");
+        }
+
+        LotDraft updatedDraft = state.draft().withDescription(message.getText().trim());
+        conversationStorage.save(new ConversationState(ConversationStep.WAITING_PHOTO, updatedDraft));
+        return send(message, "Хорошо. Теперь загрузи одно фото лота.");
+    }
+
+    private SendMessage handlePhoto(Message message, ConversationState state) {
+        if (!message.hasPhoto()) {
+            return send(message, "Пожалуйста, загрузи одно фото лота.");
+        }
+
+        String photoFileId = message.getPhoto().stream()
+                .max(Comparator.comparing(PhotoSize::getFileSize))
+                .map(PhotoSize::getFileId)
+                .orElseThrow(() -> new IllegalStateException("Photo message has no photo sizes"));
+
+        LotDraft completedDraft = state.draft().withPhotoFileId(photoFileId);
+        conversationStorage.deleteByUserId(message.getFrom().getId());
+        return send(message, summary(completedDraft));
+    }
+
+    private SendMessage send(Message message, String text) {
+        SendMessage response = new SendMessage();
+        response.setChatId(message.getChatId());
+        response.setText(text);
+        return response;
+    }
+
+    private String summary(LotDraft draft) {
+        return """
+                Черновик лота собран.
+
+                Название: %s
+                Описание: %s
+
+                На следующем этапе отправим лот на оценку.
+                """.formatted(draft.title(), draft.description());
+    }
+}

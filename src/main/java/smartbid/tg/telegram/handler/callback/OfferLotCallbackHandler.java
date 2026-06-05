@@ -4,10 +4,20 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
+import smartbid.tg.conversation.ConversationState;
+import smartbid.tg.conversation.ConversationStep;
+import smartbid.tg.conversation.ConversationStorage;
+import smartbid.tg.lot.LotDraft;
 import smartbid.tg.telegram.callback.CallbackData;
 
 @Component
 public class OfferLotCallbackHandler implements CallbackHandler {
+
+    private final ConversationStorage conversationStorage;
+
+    public OfferLotCallbackHandler(ConversationStorage conversationStorage) {
+        this.conversationStorage = conversationStorage;
+    }
 
     @Override
     public boolean supports(CallbackQuery callbackQuery) {
@@ -16,9 +26,15 @@ public class OfferLotCallbackHandler implements CallbackHandler {
 
     @Override
     public BotApiMethod<?> handle(CallbackQuery callbackQuery) {
+        Long telegramUserId = callbackQuery.getFrom().getId();
+        Long chatId = callbackQuery.getMessage().getChatId();
+
+        LotDraft draft = LotDraft.empty(telegramUserId, chatId);
+        conversationStorage.save(new ConversationState(ConversationStep.WAITING_TITLE, draft));
+
         SendMessage response = new SendMessage();
-        response.setChatId(callbackQuery.getMessage().getChatId());
-        response.setText("\u0421\u043a\u043e\u0440\u043e \u0437\u0434\u0435\u0441\u044c \u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f \u0444\u043e\u0440\u043c\u0430 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u043b\u043e\u0442\u0430.");
+        response.setChatId(chatId);
+        response.setText("Напиши название лота.");
         return response;
     }
 }
