@@ -1,24 +1,39 @@
 package smartbid.tg.telegram.handler.message;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.PhotoSize;
+import smartbid.tg.backend.BackendLot;
+import smartbid.tg.backend.BackendLotClient;
+import smartbid.tg.backend.LotSubmission;
+import smartbid.tg.common.MoneyFormatter;
 import smartbid.tg.conversation.ConversationState;
 import smartbid.tg.conversation.ConversationStep;
 import smartbid.tg.conversation.ConversationStorage;
 import smartbid.tg.lot.LotDraft;
+import smartbid.tg.telegram.file.TelegramFileDownloader;
 
 import java.util.Comparator;
 
+@Slf4j
 @Component
 public class LotDraftMessageHandler implements MessageHandler {
 
     private final ConversationStorage conversationStorage;
+    private final TelegramFileDownloader fileDownloader;
+    private final BackendLotClient backendLotClient;
 
-    public LotDraftMessageHandler(ConversationStorage conversationStorage) {
+    public LotDraftMessageHandler(
+            ConversationStorage conversationStorage,
+            TelegramFileDownloader fileDownloader,
+            BackendLotClient backendLotClient
+    ) {
         this.conversationStorage = conversationStorage;
+        this.fileDownloader = fileDownloader;
+        this.backendLotClient = backendLotClient;
     }
 
     @Override
@@ -69,8 +84,16 @@ public class LotDraftMessageHandler implements MessageHandler {
                 .orElseThrow(() -> new IllegalStateException("Photo message has no photo sizes"));
 
         LotDraft completedDraft = state.draft().withPhotoFileId(photoFileId);
-        conversationStorage.deleteByUserId(message.getFrom().getId());
-        return send(message, summary(completedDraft));
+
+        try {
+            byte[] photo = fileDownloader.download(photoFileId);
+            BackendLot backendLot = backendLotClient.createLot(new LotSubmission(completedDraft, photo, message.getMessageId()));
+            conversationStorage.deleteByUserId(message.getFrom().getId());
+            return send(message, summary(completedDraft, backendLot));
+        } catch (RuntimeException exception) {
+            log.warn("Failed to send lot draft to backend: {}", exception.getMessage());
+            return send(message, "Не получилось отправить лот на оценку. Попробуй загрузить фото еще раз чуть позже.");
+        }
     }
 
     private SendMessage send(Message message, String text) {
@@ -80,14 +103,21 @@ public class LotDraftMessageHandler implements MessageHandler {
         return response;
     }
 
-    private String summary(LotDraft draft) {
+    private String summary(LotDraft draft, BackendLot backendLot) {
         return """
-                Черновик лота собран.
+                Лот отправлен на оценку.
 
+                ID лота: %s
                 Название: %s
                 Описание: %s
+                Начальная цена: %s p
 
-                На следующем этапе отправим лот на оценку.
-                """.formatted(draft.title(), draft.description());
+                На следующем этапе добавим подтверждение публикации.
+                """.formatted(
+                backendLot.id(),
+                draft.title(),
+                draft.description(),
+                MoneyFormatter.rublesFromKopecks(backendLot.price())
+        );
     }
 }

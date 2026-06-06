@@ -10,7 +10,7 @@ telegram:
   target-chat-id: ${TELEGRAM_TARGET_CHAT_ID:-1003999451875}
 
 backend:
-  url: ${BACKEND_URL:http://localhost:8080}
+  url: ${BACKEND_URL:http://host.docker.internal:8080}
 
 server:
   port: ${SERVER_PORT:8000}
