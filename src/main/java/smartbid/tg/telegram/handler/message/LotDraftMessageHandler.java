@@ -110,7 +110,7 @@ public class LotDraftMessageHandler implements MessageHandler {
                 ID лота: %s
                 Название: %s
                 Описание: %s
-                Начальная цена: %s p
+                Начальная цена: %s р
 
                 На следующем этапе добавим подтверждение публикации.
                 """.formatted(

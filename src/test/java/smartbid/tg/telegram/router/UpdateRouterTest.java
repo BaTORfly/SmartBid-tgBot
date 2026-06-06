@@ -102,7 +102,7 @@ class UpdateRouterTest {
         SendMessage photoResponse = routeSingle(messageUpdate(messageWithPhoto(123L, 77L, 456, "photo-file-id")));
         assertThat(photoResponse.getText()).contains("Лот отправлен на оценку");
         assertThat(photoResponse.getText()).contains("ID лота: ad-1");
-        assertThat(photoResponse.getText()).contains("Начальная цена: 1.00 p");
+        assertThat(photoResponse.getText()).contains("Начальная цена: 1.00 р");
         assertThat(conversationStorage.findByUserId(77L)).isEmpty();
 
         assertThat(fileDownloader.downloadedFileId).isEqualTo("photo-file-id");
