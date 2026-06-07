@@ -14,7 +14,10 @@ import smartbid.tg.conversation.ConversationState;
 import smartbid.tg.conversation.ConversationStep;
 import smartbid.tg.conversation.ConversationStorage;
 import smartbid.tg.lot.LotDraft;
+import smartbid.tg.publication.PendingLotPublication;
+import smartbid.tg.publication.PendingLotPublicationStorage;
 import smartbid.tg.telegram.file.TelegramFileDownloader;
+import smartbid.tg.telegram.keyboard.PostEvaluationKeyboardFactory;
 
 import java.util.Comparator;
 
@@ -25,15 +28,21 @@ public class LotDraftMessageHandler implements MessageHandler {
     private final ConversationStorage conversationStorage;
     private final TelegramFileDownloader fileDownloader;
     private final BackendLotClient backendLotClient;
+    private final PendingLotPublicationStorage pendingPublicationStorage;
+    private final PostEvaluationKeyboardFactory postEvaluationKeyboardFactory;
 
     public LotDraftMessageHandler(
             ConversationStorage conversationStorage,
             TelegramFileDownloader fileDownloader,
-            BackendLotClient backendLotClient
+            BackendLotClient backendLotClient,
+            PendingLotPublicationStorage pendingPublicationStorage,
+            PostEvaluationKeyboardFactory postEvaluationKeyboardFactory
     ) {
         this.conversationStorage = conversationStorage;
         this.fileDownloader = fileDownloader;
         this.backendLotClient = backendLotClient;
+        this.pendingPublicationStorage = pendingPublicationStorage;
+        this.postEvaluationKeyboardFactory = postEvaluationKeyboardFactory;
     }
 
     @Override
@@ -89,7 +98,18 @@ public class LotDraftMessageHandler implements MessageHandler {
             byte[] photo = fileDownloader.download(photoFileId);
             BackendLot backendLot = backendLotClient.createLot(new LotSubmission(completedDraft, photo, message.getMessageId()));
             conversationStorage.deleteByUserId(message.getFrom().getId());
-            return send(message, summary(completedDraft, backendLot));
+            pendingPublicationStorage.save(new PendingLotPublication(
+                    backendLot.id(),
+                    completedDraft.chatId(),
+                    completedDraft.telegramUserId(),
+                    completedDraft.title(),
+                    completedDraft.description(),
+                    completedDraft.photoFileId(),
+                    backendLot.price()
+            ));
+            SendMessage response = send(message, summary(completedDraft, backendLot));
+            response.setReplyMarkup(postEvaluationKeyboardFactory.create(backendLot.id()));
+            return response;
         } catch (RuntimeException exception) {
             log.warn("Failed to send lot draft to backend: {}", exception.getMessage());
             return send(message, "Не получилось отправить лот на оценку. Попробуй загрузить фото еще раз чуть позже.");

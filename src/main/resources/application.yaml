@@ -12,6 +12,14 @@ telegram:
 backend:
   url: ${BACKEND_URL:http://host.docker.internal:8080}
 
+kafka:
+  bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  ad-created-topic: ${KAFKA_AD_CREATED_TOPIC:ad-created}
+  ad-finished-topic: ${KAFKA_AD_FINISHED_TOPIC:ad-finished}
+  consumer:
+    enabled: ${KAFKA_CONSUMER_ENABLED:true}
+    group-id: ${KAFKA_CONSUMER_GROUP_ID:smartbid-tg}
+
 server:
   port: ${SERVER_PORT:8000}
 
