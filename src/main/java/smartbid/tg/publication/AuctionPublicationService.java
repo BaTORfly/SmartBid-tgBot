@@ -1,6 +1,7 @@
 package smartbid.tg.publication;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -23,7 +24,7 @@ public class AuctionPublicationService {
 
     private final BackendLotClient backendLotClient;
     private final TelegramProperties telegramProperties;
-    private final TelegramClient telegramClient;
+    private final ObjectProvider<TelegramClient> telegramClientProvider;
     private final AuctionPostKeyboardFactory keyboardFactory;
     private final PublishedAuctionStorage publishedAuctionStorage;
     private final AuctionCaptionFactory captionFactory;
@@ -31,14 +32,14 @@ public class AuctionPublicationService {
     public AuctionPublicationService(
             BackendLotClient backendLotClient,
             TelegramProperties telegramProperties,
-            TelegramClient telegramClient,
+            ObjectProvider<TelegramClient> telegramClientProvider,
             AuctionPostKeyboardFactory keyboardFactory,
             PublishedAuctionStorage publishedAuctionStorage,
             AuctionCaptionFactory captionFactory
     ) {
         this.backendLotClient = backendLotClient;
         this.telegramProperties = telegramProperties;
-        this.telegramClient = telegramClient;
+        this.telegramClientProvider = telegramClientProvider;
         this.keyboardFactory = keyboardFactory;
         this.publishedAuctionStorage = publishedAuctionStorage;
         this.captionFactory = captionFactory;
@@ -51,23 +52,41 @@ public class AuctionPublicationService {
         }
 
         Message publishedMessage = sendAuctionPost(ad);
-        publishedAuctionStorage.save(new PublishedAuction(
+        PublishedAuction auction = new PublishedAuction(
                 ad.id(),
                 telegramProperties.targetChatId(),
-                publishedMessage.getMessageId()
-        ));
+                publishedMessage.getMessageId(),
+                ad.title(),
+                ad.description(),
+                ad.expiresAt(),
+                ad.price(),
+                ad.pretendentId(),
+                null
+        );
+        publishedAuctionStorage.save(auction);
         sendOwnerConfirmation(ad);
     }
 
     private Message sendAuctionPost(BackendAd ad) {
+        PublishedAuction auction = new PublishedAuction(
+                ad.id(),
+                telegramProperties.targetChatId(),
+                null,
+                ad.title(),
+                ad.description(),
+                ad.expiresAt(),
+                ad.price(),
+                ad.pretendentId(),
+                null
+        );
         SendPhoto request = new SendPhoto();
         request.setChatId(telegramProperties.targetChatId());
         request.setPhoto(new InputFile(new ByteArrayInputStream(ad.photo()), ad.id() + ".jpg"));
-        request.setCaption(captionFactory.active(ad));
+        request.setCaption(captionFactory.active(auction));
         request.setReplyMarkup(keyboardFactory.create(ad.id()));
 
         try {
-            return telegramClient.sendPhoto(request);
+            return telegramClientProvider.getObject().sendPhoto(request);
         } catch (TelegramApiException exception) {
             throw new IllegalStateException("Failed to publish auction post to Telegram", exception);
         }
@@ -83,7 +102,7 @@ public class AuctionPublicationService {
         confirmation.setText("Лот опубликован в сообществе.");
 
         try {
-            telegramClient.sendMessage(confirmation);
+            telegramClientProvider.getObject().sendMessage(confirmation);
         } catch (TelegramApiException exception) {
             log.warn("Failed to send owner publication confirmation for ad {}", ad.id(), exception);
         }

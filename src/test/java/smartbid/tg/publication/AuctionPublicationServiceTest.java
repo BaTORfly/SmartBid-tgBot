@@ -1,8 +1,10 @@
 package smartbid.tg.publication;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
+import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageCaption;
 import org.telegram.telegrambots.meta.api.objects.Chat;
 import org.telegram.telegrambots.meta.api.objects.Message;
@@ -10,6 +12,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import smartbid.tg.backend.BackendAd;
 import smartbid.tg.backend.BackendLot;
 import smartbid.tg.backend.BackendLotClient;
+import smartbid.tg.backend.BackendPriceUpdate;
 import smartbid.tg.backend.LotSubmission;
 import smartbid.tg.config.TelegramProperties;
 import smartbid.tg.telegram.bot.TelegramClient;
@@ -31,7 +34,7 @@ class AuctionPublicationServiceTest {
     private final AuctionPublicationService service = new AuctionPublicationService(
             backendLotClient,
             new TelegramProperties(-100L),
-            telegramClient,
+            provider(telegramClient),
             new AuctionPostKeyboardFactory(),
             publishedAuctionStorage,
             new AuctionCaptionFactory()
@@ -107,14 +110,21 @@ class AuctionPublicationServiceTest {
         public void publishLot(String adId, Long ownerChatId) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public BackendPriceUpdate increaseLotPrice(String adId, Long pretendentId) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     static class FakeTelegramClient implements TelegramClient {
 
         boolean failPhoto;
+        boolean failEditCaption;
         SendPhoto sentPhoto;
         SendMessage sentMessage;
         EditMessageCaption editedCaption;
+        AnswerCallbackQuery answeredCallbackQuery;
 
         @Override
         public Message sendPhoto(SendPhoto photo) throws TelegramApiException {
@@ -139,9 +149,42 @@ class AuctionPublicationServiceTest {
         }
 
         @Override
-        public Serializable editMessageCaption(EditMessageCaption caption) {
+        public Serializable editMessageCaption(EditMessageCaption caption) throws TelegramApiException {
+            if (failEditCaption) {
+                throw new TelegramApiException("failed");
+            }
             this.editedCaption = caption;
             return Boolean.TRUE;
         }
+
+        @Override
+        public Serializable answerCallbackQuery(AnswerCallbackQuery answer) {
+            this.answeredCallbackQuery = answer;
+            return Boolean.TRUE;
+        }
+    }
+
+    static ObjectProvider<TelegramClient> provider(TelegramClient telegramClient) {
+        return new ObjectProvider<>() {
+            @Override
+            public TelegramClient getObject(Object... args) {
+                return telegramClient;
+            }
+
+            @Override
+            public TelegramClient getIfAvailable() {
+                return telegramClient;
+            }
+
+            @Override
+            public TelegramClient getIfUnique() {
+                return telegramClient;
+            }
+
+            @Override
+            public TelegramClient getObject() {
+                return telegramClient;
+            }
+        };
     }
 }

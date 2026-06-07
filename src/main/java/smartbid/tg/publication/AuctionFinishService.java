@@ -1,6 +1,7 @@
 package smartbid.tg.publication;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
@@ -21,18 +22,18 @@ public class AuctionFinishService {
     private final PublishedAuctionStorage publishedAuctionStorage;
     private final ProcessedEventStorage processedEventStorage;
     private final AuctionCaptionFactory captionFactory;
-    private final TelegramClient telegramClient;
+    private final ObjectProvider<TelegramClient> telegramClientProvider;
 
     public AuctionFinishService(
             PublishedAuctionStorage publishedAuctionStorage,
             ProcessedEventStorage processedEventStorage,
             AuctionCaptionFactory captionFactory,
-            TelegramClient telegramClient
+            ObjectProvider<TelegramClient> telegramClientProvider
     ) {
         this.publishedAuctionStorage = publishedAuctionStorage;
         this.processedEventStorage = processedEventStorage;
         this.captionFactory = captionFactory;
-        this.telegramClient = telegramClient;
+        this.telegramClientProvider = telegramClientProvider;
     }
 
     public void finish(AdFinishedEvent event) {
@@ -55,11 +56,11 @@ public class AuctionFinishService {
         EditMessageCaption request = new EditMessageCaption();
         request.setChatId(auction.targetChatId());
         request.setMessageId(auction.targetMessageId());
-        request.setCaption(captionFactory.finished(event));
+        request.setCaption(captionFactory.finished(event, auction));
         request.setReplyMarkup(finishedMarkup(event.adId()));
 
         try {
-            telegramClient.editMessageCaption(request);
+            telegramClientProvider.getObject().editMessageCaption(request);
         } catch (TelegramApiException exception) {
             throw new IllegalStateException("Failed to edit finished auction post", exception);
         }

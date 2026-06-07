@@ -2,6 +2,7 @@ package smartbid.tg.telegram.bot;
 
 import lombok.extern.slf4j.Slf4j;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
+import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
@@ -57,5 +58,10 @@ public class SmartBidTelegramBot extends TelegramLongPollingBot implements Teleg
     @Override
     public Serializable editMessageCaption(EditMessageCaption caption) throws TelegramApiException {
         return execute(caption);
+    }
+
+    @Override
+    public Serializable answerCallbackQuery(AnswerCallbackQuery answer) throws TelegramApiException {
+        return execute(answer);
     }
 }

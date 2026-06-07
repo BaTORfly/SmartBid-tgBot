@@ -15,19 +15,19 @@ class AuctionFinishServiceTest {
             publishedAuctionStorage,
             processedEventStorage,
             new AuctionCaptionFactory(),
-            telegramClient
+            AuctionPublicationServiceTest.provider(telegramClient)
     );
 
     @Test
     void editsPublishedAuctionCaptionWhenBought() {
-        publishedAuctionStorage.save(new PublishedAuction("ad-1", -100L, 789));
+        publishedAuctionStorage.save(auction().withBid(105, 77L, "@winner"));
 
         service.finish(new AdFinishedEvent("event-1", "ad-1", "bought", 77L, 105));
 
         assertThat(telegramClient.editedCaption.getChatId()).isEqualTo("-100");
         assertThat(telegramClient.editedCaption.getMessageId()).isEqualTo(789);
         assertThat(telegramClient.editedCaption.getCaption()).contains("Аукцион завершен");
-        assertThat(telegramClient.editedCaption.getCaption()).contains("Telegram ID 77");
+        assertThat(telegramClient.editedCaption.getCaption()).contains("@winner");
         assertThat(telegramClient.editedCaption.getCaption()).contains("Финальная цена: 1.05 р");
         assertThat(telegramClient.editedCaption.getReplyMarkup()).isNotNull();
         assertThat(processedEventStorage.isProcessed("event-1")).isTrue();
@@ -35,7 +35,7 @@ class AuctionFinishServiceTest {
 
     @Test
     void editsPublishedAuctionCaptionWhenExpired() {
-        publishedAuctionStorage.save(new PublishedAuction("ad-1", -100L, 789));
+        publishedAuctionStorage.save(auction());
 
         service.finish(new AdFinishedEvent("event-2", "ad-1", "expired", null, 100));
 
@@ -45,7 +45,7 @@ class AuctionFinishServiceTest {
 
     @Test
     void editsPublishedAuctionCaptionWhenRemoved() {
-        publishedAuctionStorage.save(new PublishedAuction("ad-1", -100L, 789));
+        publishedAuctionStorage.save(auction());
 
         service.finish(new AdFinishedEvent("event-3", "ad-1", "removed", null, 100));
 
@@ -54,12 +54,16 @@ class AuctionFinishServiceTest {
 
     @Test
     void skipsAlreadyProcessedEvent() {
-        publishedAuctionStorage.save(new PublishedAuction("ad-1", -100L, 789));
+        publishedAuctionStorage.save(auction());
 
         service.finish(new AdFinishedEvent("event-4", "ad-1", "expired", null, 100));
         telegramClient.editedCaption = null;
         service.finish(new AdFinishedEvent("event-4", "ad-1", "expired", null, 100));
 
         assertThat(telegramClient.editedCaption).isNull();
+    }
+
+    private PublishedAuction auction() {
+        return new PublishedAuction("ad-1", -100L, 789, "iPhone 15", "256 GB", null, 100, null, null);
     }
 }

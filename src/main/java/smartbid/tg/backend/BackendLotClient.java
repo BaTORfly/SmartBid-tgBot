@@ -7,4 +7,6 @@ public interface BackendLotClient {
     BackendAd findLotById(String adId);
 
     void publishLot(String adId, Long ownerChatId);
+
+    BackendPriceUpdate increaseLotPrice(String adId, Long pretendentId);
 }

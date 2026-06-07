@@ -27,6 +27,14 @@ public final class CallbackData {
         return INCREASE_BID_PREFIX + adId;
     }
 
+    public static boolean isIncreaseBid(String data) {
+        return data != null && data.startsWith(INCREASE_BID_PREFIX);
+    }
+
+    public static String increaseBidAdId(String data) {
+        return data.substring(INCREASE_BID_PREFIX.length());
+    }
+
     public static String finishedAuction(String adId) {
         return FINISHED_AUCTION_PREFIX + adId;
     }

@@ -12,6 +12,7 @@ import org.telegram.telegrambots.meta.api.objects.User;
 import smartbid.tg.backend.BackendAd;
 import smartbid.tg.backend.BackendLot;
 import smartbid.tg.backend.BackendLotClient;
+import smartbid.tg.backend.BackendPriceUpdate;
 import smartbid.tg.backend.LotSubmission;
 import smartbid.tg.conversation.ConversationStep;
 import smartbid.tg.conversation.InMemoryConversationStorage;
@@ -308,6 +309,11 @@ class UpdateRouterTest {
         public void publishLot(String adId, Long ownerChatId) {
             this.publishedAdId = adId;
             this.publishedOwnerChatId = ownerChatId;
+        }
+
+        @Override
+        public BackendPriceUpdate increaseLotPrice(String adId, Long pretendentId) {
+            return new BackendPriceUpdate(adId, 105);
         }
     }
 }

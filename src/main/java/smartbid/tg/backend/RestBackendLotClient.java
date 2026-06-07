@@ -85,6 +85,31 @@ public class RestBackendLotClient implements BackendLotClient {
         }
     }
 
+    @Override
+    public BackendPriceUpdate increaseLotPrice(String adId, Long pretendentId) {
+        try {
+            PriceUpdateResponse response = restClient.post()
+                    .uri("/api/v1/ads/{id}/increase", adId)
+                    .body(new IncreaseAdPriceRequest(pretendentId))
+                    .retrieve()
+                    .body(PriceUpdateResponse.class);
+
+            if (response == null) {
+                throw new IllegalStateException("Backend returned empty price update response");
+            }
+
+            return new BackendPriceUpdate(response.id(), response.price());
+        } catch (HttpStatusCodeException exception) {
+            throw new IllegalStateException(
+                    "Backend price increase failed with status %s and body: %s".formatted(
+                            exception.getStatusCode(),
+                            exception.getResponseBodyAsString()
+                    ),
+                    exception
+            );
+        }
+    }
+
     private record CreateAdRequest(
             String title,
             @JsonProperty("chat_id") Long chatId,
@@ -96,6 +121,17 @@ public class RestBackendLotClient implements BackendLotClient {
 
     private record PublishAdRequest(
             @JsonProperty("chat_id") Long chatId
+    ) {
+    }
+
+    private record IncreaseAdPriceRequest(
+            @JsonProperty("pretendent_id") Long pretendentId
+    ) {
+    }
+
+    private record PriceUpdateResponse(
+            String id,
+            long price
     ) {
     }
 
