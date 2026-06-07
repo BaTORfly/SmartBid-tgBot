@@ -9,16 +9,21 @@ import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.PhotoSize;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
+import smartbid.tg.backend.BackendAd;
 import smartbid.tg.backend.BackendLot;
 import smartbid.tg.backend.BackendLotClient;
 import smartbid.tg.backend.LotSubmission;
 import smartbid.tg.conversation.ConversationStep;
 import smartbid.tg.conversation.InMemoryConversationStorage;
+import smartbid.tg.publication.InMemoryPendingLotPublicationStorage;
 import smartbid.tg.telegram.callback.CallbackData;
 import smartbid.tg.telegram.file.TelegramFileDownloader;
 import smartbid.tg.telegram.handler.callback.OfferLotCallbackHandler;
+import smartbid.tg.telegram.handler.callback.PublishLotCallbackHandler;
+import smartbid.tg.telegram.handler.callback.RetryLotCallbackHandler;
 import smartbid.tg.telegram.handler.command.StartCommandHandler;
 import smartbid.tg.telegram.handler.message.LotDraftMessageHandler;
+import smartbid.tg.telegram.keyboard.PostEvaluationKeyboardFactory;
 import smartbid.tg.telegram.keyboard.StartKeyboardFactory;
 
 import java.util.List;
@@ -28,12 +33,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 class UpdateRouterTest {
 
     private final InMemoryConversationStorage conversationStorage = new InMemoryConversationStorage();
+    private final InMemoryPendingLotPublicationStorage pendingPublicationStorage = new InMemoryPendingLotPublicationStorage();
     private final FakeTelegramFileDownloader fileDownloader = new FakeTelegramFileDownloader();
     private final FakeBackendLotClient backendLotClient = new FakeBackendLotClient();
     private final UpdateRouter updateRouter = new UpdateRouter(
             List.of(new StartCommandHandler(new StartKeyboardFactory(), conversationStorage)),
-            List.of(new OfferLotCallbackHandler(conversationStorage)),
-            List.of(new LotDraftMessageHandler(conversationStorage, fileDownloader, backendLotClient))
+            List.of(
+                    new OfferLotCallbackHandler(conversationStorage),
+                    new PublishLotCallbackHandler(pendingPublicationStorage, backendLotClient),
+                    new RetryLotCallbackHandler(conversationStorage, pendingPublicationStorage)
+            ),
+            List.of(new LotDraftMessageHandler(
+                    conversationStorage,
+                    fileDownloader,
+                    backendLotClient,
+                    pendingPublicationStorage,
+                    new PostEvaluationKeyboardFactory()
+            ))
     );
 
     @Test
@@ -80,7 +96,7 @@ class UpdateRouterTest {
     }
 
     @Test
-    void collectsLotDraftAndSendsItToBackend() {
+    void collectsLotDraftAndSavesPendingPublication() {
         route(callbackUpdate(123L, 77L, CallbackData.OFFER_LOT));
 
         SendMessage titleResponse = routeSingle(messageUpdate(messageWithText(123L, 77L, "iPhone 15")));
@@ -102,14 +118,58 @@ class UpdateRouterTest {
         SendMessage photoResponse = routeSingle(messageUpdate(messageWithPhoto(123L, 77L, 456, "photo-file-id")));
         assertThat(photoResponse.getText()).contains("Лот отправлен на оценку");
         assertThat(photoResponse.getText()).contains("ID лота: ad-1");
-        assertThat(photoResponse.getText()).contains("Начальная цена: 1.00 p");
+        assertThat(photoResponse.getText()).contains("Начальная цена: 1.00 р");
+        assertThat(photoResponse.getReplyMarkup()).isNotNull();
         assertThat(conversationStorage.findByUserId(77L)).isEmpty();
+        assertThat(pendingPublicationStorage.findByAdId("ad-1"))
+                .hasValueSatisfying(publication -> {
+                    assertThat(publication.ownerChatId()).isEqualTo(123L);
+                    assertThat(publication.ownerUserId()).isEqualTo(77L);
+                    assertThat(publication.photoFileId()).isEqualTo("photo-file-id");
+                });
 
         assertThat(fileDownloader.downloadedFileId).isEqualTo("photo-file-id");
         assertThat(backendLotClient.submission.draft().title()).isEqualTo("iPhone 15");
         assertThat(backendLotClient.submission.draft().description()).isEqualTo("256 GB, почти новый");
         assertThat(backendLotClient.submission.messageId()).isEqualTo(456);
         assertThat(backendLotClient.submission.photo()).containsExactly(1, 2, 3);
+    }
+
+    @Test
+    void publishesPendingLotThroughBackend() {
+        route(callbackUpdate(123L, 77L, CallbackData.OFFER_LOT));
+        route(messageUpdate(messageWithText(123L, 77L, "iPhone 15")));
+        route(messageUpdate(messageWithText(123L, 77L, "256 GB, почти новый")));
+        route(messageUpdate(messageWithPhoto(123L, 77L, 456, "photo-file-id")));
+
+        SendMessage response = routeSingle(callbackUpdate(123L, 77L, CallbackData.publishLot("ad-1")));
+
+        assertThat(response.getText()).contains("Лот принят к публикации");
+        assertThat(backendLotClient.publishedAdId).isEqualTo("ad-1");
+        assertThat(backendLotClient.publishedOwnerChatId).isEqualTo(123L);
+        assertThat(pendingPublicationStorage.findByAdId("ad-1")).isEmpty();
+    }
+
+    @Test
+    void reportsMissingPendingLotOnPublishCallback() {
+        SendMessage response = routeSingle(callbackUpdate(123L, 77L, CallbackData.publishLot("missing-ad")));
+
+        assertThat(response.getText()).contains("Не нашел лот для публикации");
+    }
+
+    @Test
+    void retryLotStartsConversationAgain() {
+        route(callbackUpdate(123L, 77L, CallbackData.OFFER_LOT));
+        route(messageUpdate(messageWithText(123L, 77L, "iPhone 15")));
+        route(messageUpdate(messageWithText(123L, 77L, "256 GB, почти новый")));
+        route(messageUpdate(messageWithPhoto(123L, 77L, 456, "photo-file-id")));
+
+        SendMessage response = routeSingle(callbackUpdate(123L, 77L, CallbackData.RETRY_LOT));
+
+        assertThat(response.getText()).contains("Напиши название лота");
+        assertThat(pendingPublicationStorage.findByAdId("ad-1")).isEmpty();
+        assertThat(conversationStorage.findByUserId(77L))
+                .hasValueSatisfying(state -> assertThat(state.step()).isEqualTo(ConversationStep.WAITING_TITLE));
     }
 
     @Test
@@ -227,6 +287,8 @@ class UpdateRouterTest {
 
         private boolean fail;
         private LotSubmission submission;
+        private String publishedAdId;
+        private Long publishedOwnerChatId;
 
         @Override
         public BackendLot createLot(LotSubmission submission) {
@@ -235,6 +297,17 @@ class UpdateRouterTest {
                 throw new IllegalStateException("backend is unavailable");
             }
             return new BackendLot("ad-1", 100);
+        }
+
+        @Override
+        public BackendAd findLotById(String adId) {
+            return new BackendAd(adId, "iPhone 15", 123L, 456, "256 GB", new byte[]{1, 2, 3}, 100, null, "published", null, null);
+        }
+
+        @Override
+        public void publishLot(String adId, Long ownerChatId) {
+            this.publishedAdId = adId;
+            this.publishedOwnerChatId = ownerChatId;
         }
     }
 }

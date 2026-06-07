@@ -6,7 +6,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 @SpringBootTest(properties = {
 		"telegram.bot.enabled=false",
 		"telegram.bot.token=test-token",
-		"telegram.bot.username=test_bot"
+		"telegram.bot.username=test_bot",
+		"kafka.consumer.enabled=false"
 })
 class TgApplicationTests {
 
