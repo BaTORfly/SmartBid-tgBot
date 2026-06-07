@@ -132,7 +132,6 @@ public class LotDraftMessageHandler implements MessageHandler {
                 Описание: %s
                 Начальная цена: %s р
 
-                На следующем этапе добавим подтверждение публикации.
                 """.formatted(
                 backendLot.id(),
                 draft.title(),
