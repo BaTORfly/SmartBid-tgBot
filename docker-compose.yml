@@ -1,0 +1,21 @@
+services:
+  telegram-bot:
+    container_name: smartbid-tg-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      BACKEND_URL: http://smartbid-backend:8080
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "${SERVER_PORT:-8000}:${SERVER_PORT:-8000}"
+    networks:
+      - smartbid-backend
+
+networks:
+  smartbid-backend:
+    external: true
+    name: "${SMARTBID_DOCKER_NETWORK:-smartbid-backend_default}"
